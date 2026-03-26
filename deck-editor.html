@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deck Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#0e0f11;
+  --surface:#141518;
+  --edge:#1e2025;
+  --edge2:#272b33;
+  --muted:#3a3f4b;
+  --dim:#555e70;
+  --text:#b8c0d0;
+  --hi:#e8ecf4;
+  --accent:#4d9fff;
+  --accent-dim:rgba(77,159,255,.09);
+  --accent-mid:rgba(77,159,255,.18);
+  --green:#3ecf8e;
+  --amber:#f5a623;
+  --red:#f06a6a;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+  --lh:21px;
+  --pt:14px;
+}
+
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;display:flex;flex-direction:column}
+
+/* ── TITLEBAR ── */
+.titlebar{
+  height:40px;background:var(--surface);border-bottom:1px solid var(--edge);
+  display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;user-select:none;
+}
+.logo{font-family:var(--sans);font-weight:700;font-size:13px;color:var(--hi);display:flex;align-items:center;gap:7px;flex-shrink:0}
+.logo-mark{width:20px;height:20px;border-radius:4px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:700}
+.tb-sep{width:1px;height:16px;background:var(--edge2);margin:0 2px;flex-shrink:0}
+
+/* folder open button */
+.tb-btn{
+  display:flex;align-items:center;gap:6px;
+  background:none;border:1px solid var(--edge2);border-radius:5px;
+  color:var(--dim);font-family:var(--sans);font-size:11px;font-weight:600;
+  padding:4px 11px;cursor:pointer;transition:all .15s;
+}
+.tb-btn:hover{color:var(--hi);border-color:var(--muted);background:var(--edge)}
+.tb-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.tb-btn.primary:hover{background:#3a8fe8}
+
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.save-status{font-family:var(--sans);font-size:11px;color:var(--dim);display:flex;align-items:center;gap:5px;transition:color .2s}
+.save-status.saved{color:var(--green)}
+.save-status.unsaved{color:var(--amber)}
+.save-status.error{color:var(--red)}
+.save-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+
+/* hint bar */
+.hintbar{
+  height:28px;background:var(--bg);border-bottom:1px solid var(--edge);
+  display:flex;align-items:center;padding:0 14px;gap:16px;flex-shrink:0;
+  font-family:var(--sans);font-size:10.5px;color:var(--dim);
+}
+.hintbar code{background:var(--edge);border:1px solid var(--edge2);border-radius:3px;padding:1px 5px;font-family:var(--mono);font-size:10px;color:var(--accent)}
+.hint-sep{color:var(--edge2)}
+
+/* ── TABS ── */
+.tabbar{
+  height:36px;background:var(--surface);border-bottom:1px solid var(--edge);
+  display:flex;align-items:flex-end;overflow-x:auto;flex-shrink:0;
+}
+.tabbar::-webkit-scrollbar{height:3px}
+.tabbar::-webkit-scrollbar-thumb{background:var(--edge2);border-radius:4px}
+
+.tab{
+  display:flex;align-items:center;gap:7px;
+  padding:0 14px;height:35px;
+  border-right:1px solid var(--edge);
+  border-top:2px solid transparent;
+  color:var(--dim);font-size:12px;cursor:pointer;
+  white-space:nowrap;flex-shrink:0;
+  transition:color .12s,background .12s;
+  position:relative;user-select:none;
+}
+.tab:hover{color:var(--text);background:var(--edge)}
+.tab.active{color:var(--hi);background:var(--panel,var(--bg));border-top-color:var(--accent)}
+.tab-icon{font-size:11px;opacity:.7}
+.tab-name{}
+.tab-dirty{color:var(--amber);font-size:10px;margin-left:2px}
+.tab-close{
+  width:16px;height:16px;display:flex;align-items:center;justify-content:center;
+  border-radius:3px;font-size:11px;color:var(--muted);
+  opacity:0;transition:opacity .12s;cursor:pointer;
+}
+.tab:hover .tab-close,.tab.active .tab-close{opacity:1}
+.tab-close:hover{background:var(--edge2);color:var(--hi)}
+
+.no-tabs{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  font-family:var(--sans);font-size:11px;color:var(--dim);height:35px;
+  pointer-events:none;
+}
+
+/* ── WORKSPACE ── */
+.workspace{flex:1;display:flex;overflow:hidden}
+
+/* ── FILE TREE ── */
+.filetree{
+  width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--edge);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.filetree.collapsed{width:0;border:none}
+.ft-header{
+  height:36px;border-bottom:1px solid var(--edge);display:flex;align-items:center;
+  padding:0 10px;gap:6px;flex-shrink:0;
+}
+.ft-label{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ft-icon-btn{
+  background:none;border:none;color:var(--dim);cursor:pointer;padding:3px 5px;
+  border-radius:4px;font-size:13px;transition:all .12s;display:flex;align-items:center;
+}
+.ft-icon-btn:hover{color:var(--hi);background:var(--edge)}
+
+.ft-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:4px 0}
+.ft-scroll::-webkit-scrollbar{width:4px}
+.ft-scroll::-webkit-scrollbar-thumb{background:var(--edge2);border-radius:4px}
+
+.ft-empty{
+  padding:24px 16px;text-align:center;font-family:var(--sans);font-size:11px;
+  color:var(--dim);line-height:1.7;
+}
+.ft-open-btn{
+  margin-top:12px;display:inline-flex;align-items:center;gap:5px;
+  background:var(--accent-dim);border:1px solid rgba(77,159,255,.3);border-radius:6px;
+  color:var(--accent);font-family:var(--sans);font-size:11px;font-weight:600;
+  padding:6px 14px;cursor:pointer;transition:all .15s;
+}
+.ft-open-btn:hover{background:var(--accent-mid)}
+
+/* tree items */
+.ft-item{
+  display:flex;align-items:center;gap:0;height:26px;cursor:pointer;
+  transition:background .1s;position:relative;
+  padding-right:4px;
+}
+.ft-item:hover{background:var(--edge)}
+.ft-item.active{background:var(--accent-dim)}
+.ft-item.active .ft-name{color:var(--accent)}
+
+.ft-indent{display:flex;flex-shrink:0}
+.ft-indent-seg{width:16px;height:26px;position:relative;flex-shrink:0}
+/* subtle vertical guide */
+.ft-indent-seg::before{content:'';position:absolute;left:7px;top:0;width:1px;height:100%;background:var(--edge2);opacity:.6}
+
+.ft-arrow{width:18px;height:26px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:7px;color:var(--muted);transition:transform .15s}
+.ft-arrow.open{transform:rotate(90deg)}
+.ft-arrow.leaf{opacity:0}
+.ft-file-icon{font-size:12px;flex-shrink:0;width:18px;text-align:center}
+.ft-name{font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;font-family:var(--sans)}
+.ft-item.dir-item .ft-name{font-weight:500;color:var(--hi)}
+
+/* ── EDITOR AREA ── */
+.editor-area{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+
+.welcome-screen{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;padding:40px;
+}
+.welcome-icon{font-size:48px;opacity:.1}
+.welcome-title{font-family:var(--sans);font-weight:700;font-size:20px;color:var(--hi);opacity:.35}
+.welcome-sub{font-family:var(--sans);font-size:13px;color:var(--dim);text-align:center;line-height:1.8;max-width:320px}
+.welcome-sub kbd{
+  display:inline-block;background:var(--edge);border:1px solid var(--edge2);border-radius:3px;
+  padding:1px 6px;font-family:var(--mono);font-size:10.5px;color:var(--text);
+}
+
+.editor-pane{flex:1;display:flex;position:relative;overflow:hidden}
+
+/* line numbers */
+.lnum-col{width:52px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--edge);overflow:hidden;position:relative;z-index:3}
+.lnum-inner{position:absolute;top:var(--pt);right:12px;font-size:12px;line-height:var(--lh);color:var(--muted);white-space:pre;pointer-events:none;user-select:none;font-family:var(--mono)}
+
+/* highlight overlay */
+.hl-overlay{position:absolute;top:var(--pt);left:52px;right:0;pointer-events:none;z-index:1}
+.hl-row{height:var(--lh);position:relative}
+.hl-row.on{background:rgba(77,159,255,.10)}
+.hl-row.on::before{content:'';position:absolute;left:0;top:0;width:2px;height:100%;background:var(--accent)}
+.hl-row.on.top{background:var(--accent-mid);border-top:1px solid rgba(77,159,255,.4)}
+.hl-row.on.bot{background:var(--accent-mid);border-bottom:1px solid rgba(77,159,255,.4)}
+
+/* textarea */
+.editor-ta{
+  position:absolute;top:0;left:52px;right:0;bottom:0;
+  background:transparent;border:none;outline:none;resize:none;
+  font-family:var(--mono);font-size:13px;line-height:var(--lh);color:var(--hi);
+  padding:var(--pt) 24px;caret-color:var(--accent);z-index:2;
+  tab-size:2;white-space:pre;overflow-wrap:normal;overflow-x:auto;overflow-y:auto;
+}
+.editor-ta::selection{background:rgba(77,159,255,.25)}
+.editor-ta::-webkit-scrollbar{width:6px;height:6px}
+.editor-ta::-webkit-scrollbar-thumb{background:var(--edge2);border-radius:4px}
+
+/* ── BLOCKS PANEL ── */
+.blocks-panel{
+  width:224px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--edge);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.bp-header{
+  height:36px;border-bottom:1px solid var(--edge);display:flex;align-items:center;
+  padding:0 12px;gap:6px;flex-shrink:0;user-select:none;
+}
+.bp-title{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--dim);flex:1}
+.bp-count{font-family:var(--sans);font-size:10px;font-weight:600;color:var(--muted)}
+.sel-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 5px var(--accent);display:none;animation:blink 2s ease-in-out infinite}
+.sel-dot.show{display:block}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.bp-empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:20px 16px;text-align:center;gap:8px;
+}
+.bp-empty-icon{font-size:24px;opacity:.15}
+.bp-empty-copy{font-family:var(--sans);font-size:11px;color:var(--dim);line-height:1.7}
+.bp-empty-copy code{display:block;margin-top:10px;background:var(--edge);border:1px solid var(--edge2);border-radius:5px;padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--accent);text-align:left;line-height:2}
+
+.bp-tree{flex:1;overflow-y:auto;padding:6px 4px;display:none}
+.bp-tree::-webkit-scrollbar{width:3px}
+.bp-tree::-webkit-scrollbar-thumb{background:var(--edge2);border-radius:4px}
+
+/* block tree rows */
+.bt-row{
+  display:flex;align-items:center;border-radius:5px;cursor:pointer;
+  min-height:28px;transition:background .1s;
+}
+.bt-row:hover{background:var(--edge)}
+.bt-row.sel{background:var(--accent-dim)}
+.bt-row.sel .bt-label{color:var(--accent)}
+.bt-row.sel .bt-meta{color:rgba(77,159,255,.5)}
+
+.bt-guides{display:flex;flex-shrink:0}
+.bt-guide{width:16px;height:28px;position:relative;flex-shrink:0}
+.bt-guide::before{content:'';position:absolute;left:7px;top:0;width:1px;height:100%;background:var(--edge2)}
+.bt-chev{width:18px;height:28px;display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--muted);flex-shrink:0;transition:transform .15s}
+.bt-chev.open{transform:rotate(90deg)}
+.bt-chev.leaf{opacity:0;pointer-events:none}
+.bt-label{flex:1;font-family:var(--sans);font-size:11.5px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:5px 0}
+.bt-meta{font-size:10px;font-family:var(--mono);color:var(--muted);padding-right:8px;flex-shrink:0}
+
+/* ── STATUS ── */
+.statusbar{
+  height:24px;background:var(--surface);border-top:1px solid var(--edge);
+  display:flex;align-items:center;padding:0 12px;gap:14px;flex-shrink:0;user-select:none;
+}
+.st{font-family:var(--sans);font-size:10.5px;color:var(--dim);display:flex;align-items:center;gap:4px}
+.st strong{color:var(--text);font-weight:600}
+.st-sep{color:var(--edge2)}
+</style>
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div class="titlebar">
+  <div class="logo">
+    <div class="logo-mark">D</div>
+    Deck Editor
+  </div>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="open-folder-btn" onclick="openFolder()">📂 Open Folder</button>
+  <button class="tb-btn" onclick="openFiles()">📄 Open File(s)</button>
+  <div class="tb-right">
+    <div class="save-status" id="save-status" style="display:none">
+      <div class="save-dot"></div>
+      <span id="save-label">Saved</span>
+    </div>
+    <button class="tb-btn primary" id="save-btn" onclick="saveActive()" style="display:none">💾 Save <span style="opacity:.7;font-size:10px">Ctrl+S</span></button>
+  </div>
+</div>
+
+<!-- HINT BAR -->
+<div class="hintbar">
+  Block start: <code>// [[ Name ]]</code>
+  <span class="hint-sep">·</span>
+  Block end: <code>// [[/ Name ]]</code>
+  <span class="hint-sep">·</span>
+  HTML: <code>&lt;!-- [[ Name ]] --&gt;</code> / <code>&lt;!-- [[/ Name ]] --&gt;</code>
+  <span class="hint-sep">·</span>
+  CSS: <code>/* [[ Name ]] */</code> / <code>/* [[/ Name ]] */</code>
+  <span class="hint-sep" style="margin-left:auto"></span>
+  <span style="color:var(--muted)">Click a block in the panel to highlight it</span>
+</div>
+
+<!-- TABS -->
+<div class="tabbar" id="tabbar">
+  <div class="no-tabs" id="no-tabs-msg">No files open — open a folder or file to begin</div>
+</div>
+
+<!-- WORKSPACE -->
+<div class="workspace">
+
+  <!-- FILE TREE -->
+  <div class="filetree" id="filetree">
+    <div class="ft-header">
+      <div class="ft-label" id="ft-folder-name">EXPLORER</div>
+      <button class="ft-icon-btn" onclick="openFolder()" title="Open folder">📂</button>
+      <button class="ft-icon-btn" onclick="toggleFileTree()" title="Close explorer" style="font-size:11px">✕</button>
+    </div>
+    <div class="ft-scroll" id="ft-scroll">
+      <div class="ft-empty" id="ft-empty">
+        No folder open.<br>
+        <button class="ft-open-btn" onclick="openFolder()">📂 Open Folder</button>
+      </div>
+      <div id="ft-tree" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- EDITOR AREA -->
+  <div class="editor-area" id="editor-area">
+
+    <!-- WELCOME -->
+    <div class="welcome-screen" id="welcome">
+      <div class="welcome-icon">⬚</div>
+      <div class="welcome-title">Deck Editor</div>
+      <div class="welcome-sub">
+        Open a folder or file to start editing.<br><br>
+        <kbd>Ctrl+S</kbd> saves directly back to disk.<br>
+        Block comments in your code are detected automatically and shown in the right panel.
+      </div>
+    </div>
+
+    <!-- EDITOR PANE (hidden until file opens) -->
+    <div class="editor-pane" id="editor-pane" style="display:none">
+      <div class="lnum-col">
+        <div class="lnum-inner" id="lnum">1</div>
+      </div>
+      <div class="hl-overlay" id="hl"></div>
+      <textarea class="editor-ta" id="ta" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder=""></textarea>
+    </div>
+
+  </div>
+
+  <!-- BLOCKS PANEL -->
+  <div class="blocks-panel" id="blocks-panel">
+    <div class="bp-header">
+      <div class="bp-title">Blocks</div>
+      <div class="sel-dot" id="sel-dot"></div>
+      <div class="bp-count" id="bp-count"></div>
+    </div>
+    <div class="bp-empty" id="bp-empty">
+      <div class="bp-empty-icon">⬚</div>
+      <div class="bp-empty-copy">
+        No blocks in this file.
+        <code>// [[ Name ]]<br>  …code…<br>// [[/ Name ]]</code>
+      </div>
+    </div>
+    <div class="bp-tree" id="bp-tree"></div>
+  </div>
+
+</div>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <div class="st">Ln <strong id="st-ln">—</strong></div>
+  <div class="st">Col <strong id="st-col">—</strong></div>
+  <span class="st-sep">|</span>
+  <div class="st">Blocks <strong id="st-bl">0</strong></div>
+  <span class="st-sep">|</span>
+  <div class="st" id="st-file" style="color:var(--dim)">No file open</div>
+  <span class="st-sep" style="margin-left:auto">|</span>
+  <div class="st" id="st-api-note" style="color:var(--dim);font-size:10px"></div>
+</div>
+
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════════════
+   BLOCK PARSING
+══════════════════════════════════════════════════ */
+const RE_S = /^\s*(?:\/\/\s*|<!--\s*|\/\*\s*)\[\[\s*([^\]\/][^\]]*?)\s*\]\](?:\s*-->|\s*\*\/)?\s*$/;
+const RE_E = /^\s*(?:\/\/\s*|<!--\s*|\/\*\s*)\[\[\/\s*([^\]]*?)\s*\]\](?:\s*-->|\s*\*\/)?\s*$/;
+
+function parseBlocks(lines) {
+  const stack = [], roots = [], flat = [];
+  let uid = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const em = l.match(RE_E), sm = !em && l.match(RE_S);
+    if (sm) {
+      const b = { id:`b${++uid}`, name:sm[1].trim(), start:i, end:null, depth:stack.length, parent:stack.length?stack[stack.length-1]:null, children:[] };
+      if (b.parent) b.parent.children.push(b); else roots.push(b);
+      flat.push(b); stack.push(b);
+    } else if (em && stack.length) {
+      const name = em[1].trim().toLowerCase();
+      let idx = stack.length - 1;
+      for (let k = stack.length-1; k >= 0; k--) if (stack[k].name.toLowerCase()===name){idx=k;break}
+      stack[idx].end = i; stack.splice(idx,1);
+    }
+  }
+  for (const b of flat) if (b.end===null) b.end = lines.length-1;
+  return { roots, flat };
+}
+
+/* ══════════════════════════════════════════════════
+   FILE SYSTEM ACCESS API DETECTION
+══════════════════════════════════════════════════ */
+const HAS_FSA = ('showOpenFilePicker' in window);
+
+document.getElementById('st-api-note').textContent =
+  HAS_FSA ? 'Direct save supported ✓' : 'Use Chrome/Edge for direct save';
+
+/* ══════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════ */
+// openTabs: { id, name, content, handle(FSA)|null, dirty, blocks:[], selected:Set, openNodes:{} }
+let tabs      = [];
+let activeTab = null;       // current tab id
+let ftItems   = [];         // file tree entries (built from FSA directory)
+let ftOpen    = {};         // dir handle.name -> bool
+let fileTreeVisible = true;
+
+/* ══════════════════════════════════════════════════
+   OPEN FOLDER
+══════════════════════════════════════════════════ */
+async function openFolder() {
+  if (!HAS_FSA) { alert('Opening folders requires Chrome or Edge 86+.\n\nUse "Open File(s)" to open individual files.'); return; }
+  let dirHandle;
+  try { dirHandle = await window.showDirectoryPicker({ mode:'readwrite' }); }
+  catch(e){ return; }  // user cancelled
+
+  document.getElementById('ft-folder-name').textContent = dirHandle.name.toUpperCase();
+  document.getElementById('ft-empty').style.display = 'none';
+  document.getElementById('ft-tree').style.display  = 'block';
+
+  // Build tree
+  ftItems = [];
+  await walkDir(dirHandle, 0, null);
+  renderFileTree();
+}
+
+async function walkDir(handle, depth, parentId) {
+  const children = [];
+  for await (const [name, h] of handle.entries()) {
+    if (name.startsWith('.')) continue; // skip hidden
+    children.push({ name, handle:h, kind:h.kind });
+  }
+  // sort: dirs first, then files, then alphabetically
+  children.sort((a,b) => {
+    if (a.kind !== b.kind) return a.kind==='directory' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  for (const c of children) {
+    const id = `ft-${Math.random().toString(36).slice(2)}`;
+    const item = { id, name:c.name, handle:c.handle, kind:c.kind, depth, parentId, children:[] };
+    ftItems.push(item);
+    if (parentId) {
+      const par = ftItems.find(x=>x.id===parentId);
+      if (par) par.children.push(id);
+    }
+    if (c.kind === 'directory') {
+      if (ftOpen[c.name] === undefined) ftOpen[c.name] = depth < 1; // auto-open first level
+      await walkDir(c.handle, depth+1, id);
+    }
+  }
+}
+
+function renderFileTree() {
+  const container = document.getElementById('ft-tree');
+  container.innerHTML = '';
+  renderFTNodes(ftItems.filter(x=>x.parentId===null), container);
+}
+
+function renderFTNodes(nodes, parent) {
+  for (const item of nodes) {
+    const isDir = item.kind === 'directory';
+    const isOpen = ftOpen[item.name];
+    const hasChildren = isDir && ftItems.some(x=>x.parentId===item.id);
+
+    const el = document.createElement('div');
+    el.className = 'ft-item' + (isDir ? ' dir-item' : '') + (!isDir && activeTab && tabs.find(t=>t.id===activeTab)?.handle===item.handle ? ' active' : '');
+    el.dataset.ftid = item.id;
+
+    // indent
+    const indent = document.createElement('div');
+    indent.className = 'ft-indent';
+    for (let i=0; i<item.depth; i++) {
+      const seg = document.createElement('div'); seg.className='ft-indent-seg'; indent.appendChild(seg);
+    }
+
+    // arrow
+    const arrow = document.createElement('div');
+    arrow.className = 'ft-arrow' + (isDir ? (isOpen?' open':'') : ' leaf');
+    arrow.textContent = '▶';
+
+    // icon
+    const icon = document.createElement('div');
+    icon.className = 'ft-file-icon';
+    icon.textContent = isDir ? (isOpen ? '📂' : '📁') : getFileIcon(item.name);
+
+    // name
+    const name = document.createElement('div');
+    name.className = 'ft-name';
+    name.textContent = item.name;
+
+    el.appendChild(indent); el.appendChild(arrow); el.appendChild(icon); el.appendChild(name);
+
+    el.addEventListener('click', async () => {
+      if (isDir) {
+        ftOpen[item.name] = !ftOpen[item.name];
+        renderFileTree();
+      } else {
+        await openFileHandle(item.handle, item.name);
+      }
+    });
+
+    parent.appendChild(el);
+
+    // render open dir children
+    if (isDir && isOpen && hasChildren) {
+      const kids = item.children.map(cid => ftItems.find(x=>x.id===cid)).filter(Boolean);
+      renderFTNodes(kids, parent);
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   OPEN FILES (picker)
+══════════════════════════════════════════════════ */
+async function openFiles() {
+  if (HAS_FSA) {
+    let handles;
+    try {
+      handles = await window.showOpenFilePicker({ multiple:true });
+    } catch(e){ return; }
+    for (const h of handles) {
+      await openFileHandle(h, h.name);
+    }
+  } else {
+    // Fallback: classic <input type=file>
+    const input = document.createElement('input');
+    input.type='file'; input.multiple=true;
+    input.onchange = async () => {
+      for (const file of input.files) {
+        const content = await file.text();
+        openTab({ name:file.name, content, handle:null });
+      }
+    };
+    input.click();
+  }
+}
+
+async function openFileHandle(handle, name) {
+  // if already open, just switch
+  const existing = tabs.find(t=>t.handle===handle);
+  if (existing) { switchTab(existing.id); return; }
+
+  let content = '';
+  try {
+    const file = await handle.getFile();
+    content = await file.text();
+  } catch(e){ showSaveStatus('error','Cannot read file'); return; }
+
+  openTab({ name, content, handle });
+}
+
+/* ══════════════════════════════════════════════════
+   TAB MANAGEMENT
+══════════════════════════════════════════════════ */
+function openTab({ name, content, handle }) {
+  const id = `tab-${Date.now()}-${Math.random()}`;
+  const tab = { id, name, content, handle, dirty:false, blocks:[], selected:new Set(), openNodes:{}, scrollTop:0, selStart:0 };
+  tabs.push(tab);
+  renderTabs();
+  switchTab(id);
+  renderFileTree(); // update active highlight
+}
+
+function closeTab(id, e) {
+  if (e) e.stopPropagation();
+  const tab = tabs.find(t=>t.id===id);
+  if (tab && tab.dirty) {
+    if (!confirm(`"${tab.name}" has unsaved changes. Close anyway?`)) return;
+  }
+  tabs = tabs.filter(t=>t.id!==id);
+  if (activeTab===id) {
+    activeTab = tabs.length ? tabs[tabs.length-1].id : null;
+  }
+  renderTabs();
+  if (activeTab) switchTab(activeTab);
+  else           showWelcome();
+  renderFileTree();
+}
+
+function switchTab(id) {
+  // save scroll/cursor of current tab before switching
+  if (activeTab) {
+    const cur = tabs.find(t=>t.id===activeTab);
+    if (cur) {
+      cur.scrollTop = document.getElementById('ta').scrollTop;
+      cur.selStart  = document.getElementById('ta').selectionStart;
+    }
+  }
+
+  activeTab = id;
+  const tab = tabs.find(t=>t.id===id);
+  if (!tab) return;
+
+  // show editor pane
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('editor-pane').style.display = 'flex';
+  document.getElementById('save-btn').style.display = 'flex';
+  document.getElementById('save-status').style.display = 'flex';
+
+  const ta = document.getElementById('ta');
+  ta.value = tab.content;
+  // restore scroll
+  requestAnimationFrame(() => {
+    ta.scrollTop = tab.scrollTop || 0;
+    ta.selectionStart = ta.selectionEnd = tab.selStart || 0;
+  });
+
+  renderTabs();
+  fullRender();
+  setSaveStatus(tab.dirty);
+  document.getElementById('st-file').textContent = tab.name;
+  renderFileTree();
+}
+
+function showWelcome() {
+  document.getElementById('welcome').style.display = 'flex';
+  document.getElementById('editor-pane').style.display = 'none';
+  document.getElementById('save-btn').style.display = 'none';
+  document.getElementById('save-status').style.display = 'none';
+  document.getElementById('st-file').textContent = 'No file open';
+  document.getElementById('st-ln').textContent = '—';
+  document.getElementById('st-col').textContent = '—';
+  document.getElementById('st-bl').textContent = '0';
+  clearBlocks();
+}
+
+function renderTabs() {
+  const bar = document.getElementById('tabbar');
+  const msg = document.getElementById('no-tabs-msg');
+  // remove old tabs
+  bar.querySelectorAll('.tab').forEach(el=>el.remove());
+
+  if (tabs.length === 0) { msg.style.display='flex'; return; }
+  msg.style.display = 'none';
+
+  for (const tab of tabs) {
+    const el = document.createElement('div');
+    el.className = 'tab' + (tab.id===activeTab?' active':'');
+    el.innerHTML = `
+      <span class="tab-icon">${getFileIcon(tab.name)}</span>
+      <span class="tab-name">${escHtml(tab.name)}</span>
+      <span class="tab-dirty" style="display:${tab.dirty?'inline':'none'}">●</span>
+      <span class="tab-close" title="Close">✕</span>
+    `;
+    el.addEventListener('click', () => switchTab(tab.id));
+    el.querySelector('.tab-close').addEventListener('click', e => closeTab(tab.id, e));
+    bar.appendChild(el);
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   SAVE
+══════════════════════════════════════════════════ */
+async function saveActive() {
+  if (!activeTab) return;
+  const tab = tabs.find(t=>t.id===activeTab);
+  if (!tab) return;
+
+  const content = document.getElementById('ta').value;
+
+  if (tab.handle && HAS_FSA) {
+    // Direct write back to disk
+    try {
+      const writable = await tab.handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      tab.content = content;
+      tab.dirty = false;
+      setSaveStatus(false);
+      renderTabs();
+      showSaveStatus('saved','Saved to disk');
+    } catch(e) {
+      showSaveStatus('error','Save failed: ' + e.message);
+    }
+  } else {
+    // Fallback: download
+    const blob = new Blob([content], { type:'text/plain' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href=url; a.download=tab.name; a.click();
+    URL.revokeObjectURL(url);
+    tab.content = content;
+    tab.dirty = false;
+    setSaveStatus(false);
+    renderTabs();
+    showSaveStatus('saved','Downloaded');
+  }
+}
+
+function setSaveStatus(dirty) {
+  const tab = activeTab ? tabs.find(t=>t.id===activeTab) : null;
+  if (!tab) return;
+  tab.dirty = dirty;
+  const el = document.getElementById('save-status');
+  el.className = 'save-status ' + (dirty ? 'unsaved' : 'saved');
+  document.getElementById('save-label').textContent = dirty ? 'Unsaved changes' : 'Saved';
+  renderTabs();
+}
+
+let saveStatusTimer;
+function showSaveStatus(type, msg) {
+  clearTimeout(saveStatusTimer);
+  const el = document.getElementById('save-status');
+  el.className = 'save-status ' + type;
+  document.getElementById('save-label').textContent = msg;
+  saveStatusTimer = setTimeout(() => {
+    const tab = activeTab ? tabs.find(t=>t.id===activeTab) : null;
+    setSaveStatus(tab ? tab.dirty : false);
+  }, 2000);
+}
+
+/* ══════════════════════════════════════════════════
+   EDITOR EVENTS
+══════════════════════════════════════════════════ */
+const ta = document.getElementById('ta');
+
+ta.addEventListener('input', () => {
+  if (!activeTab) return;
+  const tab = tabs.find(t=>t.id===activeTab);
+  if (tab) { tab.content = ta.value; tab.dirty = true; setSaveStatus(true); }
+  fullRender();
+});
+
+ta.addEventListener('scroll', () => {
+  const dy = ta.scrollTop;
+  document.getElementById('lnum').style.transform = `translateY(${-dy}px)`;
+  document.getElementById('hl').style.transform   = `translateY(${-dy}px)`;
+});
+
+ta.addEventListener('keydown', e => {
+  if (e.key==='Tab') {
+    e.preventDefault();
+    const s=ta.selectionStart, v=ta.value;
+    ta.value = v.slice(0,s)+'  '+v.slice(ta.selectionEnd);
+    ta.selectionStart=ta.selectionEnd=s+2;
+    fullRender();
+  }
+});
+
+ta.addEventListener('keyup', updateCursor);
+ta.addEventListener('click', updateCursor);
+
+function updateCursor() {
+  const val = ta.value;
+  const pos = ta.selectionStart;
+  const before = val.slice(0, pos);
+  const ln  = before.split('\n').length;
+  const col = pos - before.lastIndexOf('\n');
+  document.getElementById('st-ln').textContent  = ln;
+  document.getElementById('st-col').textContent = col;
+}
+
+/* ══════════════════════════════════════════════════
+   FULL RENDER (editor + overlay + panel)
+══════════════════════════════════════════════════ */
+function fullRender() {
+  if (!activeTab) return;
+  const tab = tabs.find(t=>t.id===activeTab);
+  if (!tab) return;
+
+  const lines = ta.value.split('\n');
+  const { roots, flat } = parseBlocks(lines);
+  tab.blocks = flat;
+
+  // prune stale selections
+  for (const id of [...tab.selected]) if (!flat.find(b=>b.id===id)) tab.selected.delete(id);
+
+  renderLNums(lines.length);
+  renderHL(lines.length, tab);
+  renderBlocksPanel(roots, flat, tab);
+
+  document.getElementById('st-bl').textContent = flat.length;
+}
+
+/* ══════════════════════════════════════════════════
+   LINE NUMBERS
+══════════════════════════════════════════════════ */
+function renderLNums(count) {
+  const arr = []; for (let i=1;i<=count;i++) arr.push(i);
+  document.getElementById('lnum').textContent = arr.join('\n');
+}
+
+/* ══════════════════════════════════════════════════
+   HIGHLIGHT OVERLAY
+══════════════════════════════════════════════════ */
+function buildLineMap(tab) {
+  const map = new Map();
+  function cover(b) {
+    for (let i=b.start;i<=b.end;i++) {
+      const cur=map.get(i)||{top:false,bot:false};
+      cur.top=cur.top||(i===b.start); cur.bot=cur.bot||(i===b.end);
+      map.set(i,cur);
+    }
+    for (const c of b.children) cover(c);
+  }
+  for (const id of tab.selected) { const b=tab.blocks.find(x=>x.id===id); if(b) cover(b); }
+  return map;
+}
+
+function renderHL(count, tab) {
+  const map = buildLineMap(tab);
+  let html = '';
+  for (let i=0;i<count;i++) {
+    const info=map.get(i);
+    if (!info){html+='<div class="hl-row"></div>';continue;}
+    let cls='hl-row on';
+    if(info.top) cls+=' top'; if(info.bot) cls+=' bot';
+    html+=`<div class="${cls}"></div>`;
+  }
+  document.getElementById('hl').innerHTML = html;
+}
+
+/* ══════════════════════════════════════════════════
+   BLOCKS PANEL
+══════════════════════════════════════════════════ */
+function clearBlocks() {
+  document.getElementById('bp-empty').style.display='flex';
+  document.getElementById('bp-tree').style.display='none';
+  document.getElementById('bp-count').textContent='';
+  document.getElementById('sel-dot').classList.remove('show');
+}
+
+function renderBlocksPanel(roots, flat, tab) {
+  const emptyEl = document.getElementById('bp-empty');
+  const treeEl  = document.getElementById('bp-tree');
+  const countEl = document.getElementById('bp-count');
+  const dotEl   = document.getElementById('sel-dot');
+
+  if (flat.length===0) { emptyEl.style.display='flex';treeEl.style.display='none';countEl.textContent='';dotEl.classList.remove('show');return; }
+
+  emptyEl.style.display='none';treeEl.style.display='block';
+  countEl.textContent = flat.length;
+  dotEl.classList.toggle('show', tab.selected.size>0);
+
+  treeEl.innerHTML='';
+  buildBPNodes(roots, treeEl, 0, tab);
+}
+
+function buildBPNodes(nodes, parent, depth, tab) {
+  for (const b of nodes) {
+    if (tab.openNodes[b.id]===undefined) tab.openNodes[b.id]=true;
+
+    const nodeEl=document.createElement('div');
+
+    const row=document.createElement('div');
+    row.className='bt-row'+(tab.selected.has(b.id)?' sel':'');
+    row.dataset.id=b.id;
+
+    const guides=document.createElement('div');guides.className='bt-guides';
+    for(let i=0;i<depth;i++){const g=document.createElement('div');g.className='bt-guide';guides.appendChild(g);}
+
+    const hasKids=b.children.length>0;
+    const chev=document.createElement('div');
+    chev.className='bt-chev'+(hasKids?(tab.openNodes[b.id]?' open':''):' leaf');
+    chev.textContent='▶';
+    if(hasKids){
+      chev.addEventListener('click',e=>{
+        e.stopPropagation();
+        tab.openNodes[b.id]=!tab.openNodes[b.id];
+        fullRender();
+      });
+    }
+
+    const label=document.createElement('div');label.className='bt-label';label.textContent=b.name;
+    const meta=document.createElement('div');meta.className='bt-meta';meta.textContent=(b.end-b.start+1)+'L';
+
+    row.appendChild(guides);row.appendChild(chev);row.appendChild(label);row.appendChild(meta);
+    row.addEventListener('click',()=>toggleBlock(b.id,tab));
+    nodeEl.appendChild(row);
+
+    if(hasKids&&tab.openNodes[b.id]){
+      const cw=document.createElement('div');
+      buildBPNodes(b.children,cw,depth+1,tab);
+      nodeEl.appendChild(cw);
+    }
+    parent.appendChild(nodeEl);
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   TOGGLE BLOCK SELECTION
+══════════════════════════════════════════════════ */
+function toggleBlock(id, tab) {
+  if (tab.selected.has(id)) tab.selected.delete(id);
+  else                       tab.selected.add(id);
+
+  renderHL(ta.value.split('\n').length, tab);
+
+  // update row appearance
+  document.querySelectorAll('.bt-row').forEach(row => {
+    const isSel=tab.selected.has(row.dataset.id);
+    row.classList.toggle('sel',isSel);
+    row.querySelector('.bt-label').style.color=isSel?'var(--accent)':'';
+    row.querySelector('.bt-meta').style.color=isSel?'rgba(77,159,255,.5)':'';
+  });
+
+  document.getElementById('sel-dot').classList.toggle('show',tab.selected.size>0);
+  document.getElementById('bp-count').textContent=tab.blocks.length;
+
+  // scroll to block
+  if (tab.selected.has(id)) {
+    const b=tab.blocks.find(x=>x.id===id);
+    if(b){ const lh=21,pt=14; ta.scrollTop=Math.max(0,b.start*lh-pt-lh); }
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   FILE TREE TOGGLE
+══════════════════════════════════════════════════ */
+function toggleFileTree() {
+  fileTreeVisible=!fileTreeVisible;
+  document.getElementById('filetree').classList.toggle('collapsed',!fileTreeVisible);
+}
+
+/* ══════════════════════════════════════════════════
+   FILE ICON
+══════════════════════════════════════════════════ */
+function getFileIcon(name) {
+  const ext=name.split('.').pop().toLowerCase();
+  const map={
+    html:'🌐',htm:'🌐',css:'🎨',js:'⚡',jsx:'⚛',ts:'⚡',tsx:'⚛',
+    json:'{}',md:'📝',txt:'📄',py:'🐍',sh:'💻',
+    svg:'🖼',png:'🖼',jpg:'🖼',jpeg:'🖼',gif:'🖼',webp:'🖼',
+    yml:'⚙',yaml:'⚙',env:'⚙',gitignore:'🚫',
+    sql:'🗄',php:'🐘',rb:'💎',go:'🐹',rs:'🦀',
+  };
+  return map[ext]||'📄';
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ══════════════════════════════════════════════════
+   GLOBAL KEYBOARD
+══════════════════════════════════════════════════ */
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey||e.metaKey) && e.key==='s') { e.preventDefault(); saveActive(); }
+  if ((e.ctrlKey||e.metaKey) && e.key==='w') { e.preventDefault(); if(activeTab) closeTab(activeTab); }
+  if ((e.ctrlKey||e.metaKey) && e.key==='o') { e.preventDefault(); openFiles(); }
+  if ((e.ctrlKey||e.metaKey) && e.shiftKey && e.key==='E') { e.preventDefault(); toggleFileTree(); }
+  // Ctrl+Tab cycle tabs
+  if (e.key==='Tab' && e.ctrlKey && tabs.length>1) {
+    e.preventDefault();
+    const idx=tabs.findIndex(t=>t.id===activeTab);
+    const next=tabs[(idx+1)%tabs.length];
+    switchTab(next.id);
+  }
+});
+
+/* ══════════════════════════════════════════════════
+   DRAG & DROP FILES onto editor
+══════════════════════════════════════════════════ */
+document.addEventListener('dragover', e=>e.preventDefault());
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  const items=[...e.dataTransfer.items];
+  for(const item of items){
+    if(item.kind!=='file') continue;
+    if(HAS_FSA && item.getAsFileSystemHandle){
+      const h=await item.getAsFileSystemHandle();
+      if(h.kind==='file') await openFileHandle(h,h.name);
+    } else {
+      const file=item.getAsFile();
+      if(!file) continue;
+      const content=await file.text();
+      openTab({name:file.name,content,handle:null});
+    }
+  }
+});
+</script>
+</body>
+</html>
